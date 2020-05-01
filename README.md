@@ -1,1 +1,1 @@
-# second_order_optimization_236c
+# Term Project for ECE 236c: Comaring 2nd order optimizers
