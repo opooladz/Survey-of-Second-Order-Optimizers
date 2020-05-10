@@ -46,5 +46,8 @@ def hessian(output, inputs, out=None, allow_unused=False, create_graph=False):
         del grad
 
     return out
+
+'''
 disp(['NORM(Z * DCTINV(Z)): ',num2str(PR2)]);
 %Let's check errors
+'''

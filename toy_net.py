@@ -13,7 +13,6 @@ def LM(model,loss,n_iter=30):
         loss_out=loss(out)
         prev_loss=loss_out.item()
         gradients=torch.autograd.grad(loss_out, model.parameters(), create_graph=True)
-
         model.eval()
         Hessian, g_vector=eval_hessian(gradients, model)
 

@@ -47,6 +47,7 @@ def jacobian(outputs, inputs, create_graph=False,retain_graph=True):
         output_flat = output.view(-1)
         output_grad = torch.zeros_like(output_flat)
         for i in range(len(output_flat)):
+            print (i)
             output_grad[i] = 1
             jac += [gradient(output_flat, inputs, output_grad, retain_graph, create_graph)]
             output_grad[i] = 0
