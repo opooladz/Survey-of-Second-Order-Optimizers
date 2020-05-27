@@ -19,6 +19,11 @@ Overall:
   - [ ] What are the tradeoffs 
   - [ ] Show on different datasets
   - [ ] Show different tasks
+ 
+ - [ ] Questions: 
+      - [ ] Can we compare Hessian-Free and LBFGS since they do multiple iterations per-teration?
+      - [ ] Do we count failed iterations as iterations?
+      - [ ] How can we compare with the multiple iterations per step in HF and LBFGS
   
 
 Yiming:
@@ -30,11 +35,13 @@ Yiming:
 Omead:
 - [ ] Coding
   - [x] Add KFAC/EKFAC
-  - [ ] Add Hessian Free optimization to the comparisons: https://github.com/fmeirinhos/pytorch-hessianfree 
+  - [ ] Add [Hessian Free]( https://github.com/fmeirinhos/pytorch-hessianfree) optimization to the comparisons 
   - [ ] Add L-BFGS
   - [ ] Add Timing analysis 
 - [ ] Have Louis give the updated classificaiton code.
 - [ ] Make summary of MST paper
+
+
 
 
 ![GitHub Logo](/algorithmComparison.png)
