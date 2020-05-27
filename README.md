@@ -22,7 +22,7 @@ Overall:
   
 
 Yiming:
--[ ] Coding
+- [ ] Coding
   - [ ] Add CG adaptive momentum to the LM code
   - [ ] Add above determined optimizations such as linesearch, backtracking, trust reigons etc. 
 
