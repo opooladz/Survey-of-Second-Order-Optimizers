@@ -31,6 +31,7 @@ Omead:
 - [ ] Coding
   - [x] Add KFAC/EKFAC
   - [ ] Add Hessian Free optimization to the comparisons: https://github.com/fmeirinhos/pytorch-hessianfree 
+  - [ ] Add L-BFGS
   - [ ] Add Timing analysis 
 - [ ] Have Louis give the updated classificaiton code.
 - [ ] Make summary of MST paper
