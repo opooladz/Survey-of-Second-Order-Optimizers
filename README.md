@@ -30,6 +30,7 @@ Yiming:
 - [ ] Coding
   - [ ] Add CG adaptive momentum to the LM code
   - [ ] Add above determined optimizations such as linesearch, backtracking, trust reigons etc. 
+  - [ ] Look at various adaptive trust reigon methods
 
 
 Omead:
@@ -38,11 +39,19 @@ Omead:
   - [x] Add [Hessian Free]( https://github.com/fmeirinhos/pytorch-hessianfree) optimization to the comparisons 
   - [x] Add L-BFGS
   - [ ] Add Timing analysis 
-  - [ ] Add Learning rate Search with trust reigion
+  - [x] ~~Add Learning rate Search with trust reigion~~
 - [ ] Have Louis give the updated classificaiton code.
 - [ ] Make summary of MST paper
 
 
 
+## Include Failed Iterations of LM
+![GitHub Logo](/algorithmComparison_counting_failed_iterations.png)
 
-![GitHub Logo](/algorithmComparison.png)
+## Search over LR of LM
+![GitHub Logo](/algorithmComparison_with_lr_search.png)
+
+## Without Failed Iterations of LM
+![GitHub Logo](/algorithmComparison_no_ls.png)
+
+
