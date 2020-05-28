@@ -3,8 +3,8 @@
 ## Todo
 Overall: 
 - [ ] Figure out which optimizations from [Martens and Sutskever(2012) section 20](https://link.springer.com/chapter/10.1007/978-3-642-35289-8_27) are applicable to LM.
-     - [ ] linesearch
-     - [ ] backtracking
+     - [ ] ~~linesearch~~
+     - [ ] ~~backtracking~~
      - [ ] trust reigons
      - [ ] etc  
 - [ ] Coding
@@ -35,9 +35,10 @@ Yiming:
 Omead:
 - [ ] Coding
   - [x] Add KFAC/EKFAC
-  - [ ] Add [Hessian Free]( https://github.com/fmeirinhos/pytorch-hessianfree) optimization to the comparisons 
-  - [ ] Add L-BFGS
+  - [x] Add [Hessian Free]( https://github.com/fmeirinhos/pytorch-hessianfree) optimization to the comparisons 
+  - [x] Add L-BFGS
   - [ ] Add Timing analysis 
+  - [ ] Add Learning rate Search with trust reigion
 - [ ] Have Louis give the updated classificaiton code.
 - [ ] Make summary of MST paper
 
