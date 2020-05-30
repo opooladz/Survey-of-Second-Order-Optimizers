@@ -13,6 +13,8 @@ import scipy.io
 import sys
 import traceback
 # import fast_inv
+import copy
+from torch.nn.utils.convert_parameters import vector_to_parameters, parameters_to_vector
 
 
 
@@ -84,7 +86,19 @@ class LM(Optimizer):
 
         self._params = self.param_groups[0]['params']
 
-    def step(self, closure=None):
+    def _gather_flat_grad(self):
+        views = list()
+        for p in self._params:
+            if p.grad is None:
+                view = p.data.new(p.data.numel()).zero_()
+            elif p.grad.data.is_sparse:
+                view = p.grad.data.to_dense().view(-1)
+            else:
+                view = p.grad.contiguous().view(-1)
+            views.append(view)
+        return torch.cat(views, 0)
+        
+    def step(self, closure=None,b=None):
         '''
         performs a single step
         in the closure: we evaluate the diff
@@ -96,30 +110,67 @@ class LM(Optimizer):
         alpha = group['alpha']
         params = group['params']
         blocks = group['blocks']
+        
 
-        diff= closure()
+        diff = closure()
 
         # calculate Jacobian
         J = jacobian(diff,params , create_graph=True, retain_graph=True).detach()
         prev_loss = torch.mean(diff.detach() ** 2)
         # approximate Hessian
-        H = torch.matmul(J.T, J) + torch.eye(J.shape[-1]).to('cuda:0') * alpha   
-        with torch.no_grad():
+        # H = torch.matmul(J.T, J) + torch.eye(J.shape[-1]).to('cuda:0') * alpha   
+        # with torch.no_grad():
             # H_inv = fast_inv.inv_block_gpu(H,blocks)
-            H_inv = torch.inverse(H)
+            # H_inv = torch.inverse(H)
         # calculate the update
+        with torch.no_grad():
+            delta_w = -1 * torch.matmul(torch.inverse(torch.matmul(J.T, J) + torch.eye(J.shape[-1]).to('cuda:0') * alpha), torch.matmul(J.T, diff)).detach()
 
-        delta_w = -1 * torch.matmul(H_inv, torch.matmul(J.T, diff)).detach()
-        # print(delta_w.shape)
+        # delta_w = -1 * torch.matmul(fast_inv.inv_block_gpu(torch.matmul(J.T, J) + torch.eye(J.shape[-1]).to('cuda:0') * alpha,blocks), torch.matmul(J.T, diff)).detach()
+        # vector_to_parameters(flat_params + lr * delta_w,self._params)
+        # diff = closure()
+        # loss = torch.mean(diff.detach() ** 2)
         offset = 0
         for p in group['params']:
             numel = p.numel()
             with torch.no_grad():
                 p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
             offset += numel
-
         diff = closure()
-        loss = torch.mean(diff.detach() ** 2)
+        loss = torch.mean(diff.detach() ** 2) 
+        # line search for lr
+        # loss_list = []
+        # line = torch.arange(1e-2,2,0.05)**3
+        # for i in range(len(line)):
+        #     offset = 0
+        #     for p in group['params']:
+        #         numel = p.numel()
+        #         with torch.no_grad():
+        #             p.add_(delta_w[offset:offset + numel].view_as(p),alpha=line[i])
+        #         offset += numel
+        #     diff = closure()
+        #     loss_list.append(torch.mean(diff.detach() ** 2))
+        #     # # undo the step
+        #     # group['params'] = params2
+        #     offset = 0
+        #     for p in group['params']:
+        #         numel = p.numel()
+        #         with torch.no_grad():
+        #             p.sub_( delta_w[offset:offset + numel].view_as(p),alpha=line[i])
+        #         offset += numel
+
+        # idx_best_lr = torch.argmin(torch.tensor(loss_list))
+        # lr = line[idx_best_lr]
+        # offset = 0
+        # for p in group['params']:
+        #     numel = p.numel()
+        #     with torch.no_grad():
+        #         p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
+        #     offset += numel
+        # diff = closure()
+        # loss = loss_list[idx_best_lr]
+        # print(loss)
+
         # print (loss.item())
         if loss < prev_loss:
             # print('Succssful Iteration Loss: {}'.format(loss.item()))
@@ -132,9 +183,12 @@ class LM(Optimizer):
             if alpha < 1e10:
                 group['alpha'] *= 10
             # undo the step
+            # vector_to_parameters(flat_params - lr * delta_w,self._params)
             offset = 0
             for p in group['params']:
                 numel = p.numel()
                 with torch.no_grad():
                     p.sub_( delta_w[offset:offset + numel].view_as(p),alpha=lr)
                 offset += numel
+            return prev_loss.item()
+

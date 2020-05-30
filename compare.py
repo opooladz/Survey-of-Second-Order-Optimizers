@@ -1,7 +1,7 @@
 # toy problem to show convergence vs iteration for the different models.
 # curve fitting using 2-hidden-layer FCN
 
-nIt = 500
+nIt =  200
 nItLM = nIt
 nItVGD = nIt
 nItEKFAC = nIt
