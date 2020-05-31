@@ -6,8 +6,8 @@ import argparse
 import torchvision
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', default='mnist', type=str, choices=['cifar10', 'mnist', 'mnist_small', 'regression'])
-parser.add_argument('--optimizer', default='LM', type=str, choices=['LM', 'SGD', 'Adam', 'HF', 'KFAC'])
+parser.add_argument('--dataset', default='mnist', type=str, choices=['mnist', 'mnist_small', 'regression'])
+parser.add_argument('--optimizer', default='LM', type=str, choices=['LM', 'SGD', 'Adam', 'HF', 'EKFAC','KFAC','EKFAC-Adam','KFAC-Adam','lbfgs'])
 parser.add_argument('--net_type', default='cnn', type=str, choices=['cnn', 'mlp'])
 parser.add_argument('--epoch_num', default=1, type=int)
 parser.add_argument('--device', default=0, type=int)
@@ -41,6 +41,24 @@ elif args.optimizer == 'SGD':
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
 elif args.optimizer == 'Adam':
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+elif args.optimizer == 'lbfgs':
+    optimizer  = torch.optim.LBFGS(model.parameters(), lr=0.01,line_search_fn= 'strong_wolfe')
+elif args.optimizer == 'HF':
+    optimizer = HessianFree(model.parameters(), use_gnm=True, verbose=False)
+elif args.optimizer == 'EKFAC':
+    # uses SGD or any other optimizer as its base
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+    preconditioner = EKFAC(model, 0.1, sua = False,ra=True)
+elif args.optimizer == 'KFAC':
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+    preconditioner = KFAC(model, 0.1)
+elif args.optimizer == 'EKFAC-Adam':
+    # uses Adam or any other optimizer as its base
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    preconditioner = EKFAC(model, 0.1, sua = False,ra=True)
+elif args.optimizer == 'KFAC-Adam':
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    preconditioner = KFAC(model, 0.1)
 
 if args.dataset != 'regression':
     criterion= nn.CrossEntropyLoss()
@@ -53,12 +71,15 @@ train_loss = []
 test_loss = []
 train_acc = []
 test_acc = []
+ntp = sum(p.numel() for p in model.parameters() if p.requires_grad)
+dg = torch.tensor([0.01]*ntp,device=device) 
 for epoch in range(args.epoch_num):
     for idx, (inputs, targets) in enumerate (trainloader):
         print ('iter:{}'.format(idx + 1))
         inputs, targets = inputs.to(device), targets.to(device)
         N = inputs.shape[0]
         if args.optimizer=='LM':
+            # if failed iteration run again over same batch
             def closure(sample=True):
                 N = inputs.shape[0]
                 optimizer.zero_grad()
@@ -76,13 +97,39 @@ for epoch in range(args.epoch_num):
                     loss = criterion(outputs, targets)
                     return outputs, loss
 
-            outputs, record_loss = optimizer.step(closure)
+            outputs, record_loss, dg = optimizer.step(closure,dg)
             correct = torch.sum(torch.argmax(outputs,1) == targets).item()
             
             train_acc.append(correct/N)
             train_loss.append(record_loss)
-            if idx == 50:
-                break        
+
+        elif args.optimizer == 'HF': 
+            def closure():
+                z = model(inputs)
+                loss = criterion(z, targets)
+                loss.backward(create_graph=True)
+                return loss, z
+            optimizer.zero_grad()
+            loss = optimizer.step(closure, M_inv=None)
+            train_loss.append(loss)
+        elif args.optimizer == 'lbfgs':
+            def closure():
+                optimizer.zero_grad()
+                out = model(inputs)
+                loss = criterion(out, targets)
+                loss.backward()
+                return loss
+            loss = optimizer.step(closure)
+            train_loss.append(loss)
+        elif args.optimizer == 'EKFAC' or args.optimizer == 'KFAC' or args.optimizer == 'EKFAC-Adam' or args.optimizer == 'KFAC-Adam':
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs,targets)
+            loss.backward()
+            preconditioner.step()  # Add a step of preconditioner before the optimizer step.
+            optimizer.step()
+            train_loss.append(loss)
+
 
         elif args.optimizer == 'Adam' or args.optimizer == 'SGD':
             optimizer.zero_grad()
@@ -92,10 +139,9 @@ for epoch in range(args.epoch_num):
             optimizer.step()
             correct = torch.sum(torch.argmax(outputs,1) == targets).item()
             train_loss.append(loss.item())
-            train_acc.append(correct/N)
 
-            if idx == 50:
-                break
+        if idx == 100:
+            break
 
         print ('testing...')
         total, correct = 0, 0
