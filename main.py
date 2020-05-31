@@ -36,7 +36,7 @@ elif args.net_type == 'mlp':
     model = MLP().to(device)
 
 if args.optimizer == 'LM':
-    optimizer = LM(model.parameters(), lr=0.5, alpha=10)
+    optimizer = LM(model.parameters(), lr=1, alpha=1)
 elif args.optimizer == 'SGD':
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
 elif args.optimizer == 'Adam':

@@ -8,11 +8,17 @@ class LM(Optimizer):
     Arguments:
         lr: learning rate (step size)
         alpha: the hyperparameter in the regularization
+        prev_dw: keep track of the previous delta_w as a momentum term 
+        eps, dP: two hyperparameter in the CG momentum
+
     '''
-    def __init__(self, params, lr=0.5, alpha=10):
+    def __init__(self, params, lr=1, alpha=1, eps=0.9, dP=0.6):
         defaults = dict(
             lr = lr,
-            alpha = alpha
+            alpha = alpha,
+            prev_dw = None,
+            eps = eps,
+            dP = dP
         )
         super(LM, self).__init__(params, defaults)
 
@@ -31,15 +37,30 @@ class LM(Optimizer):
         group = self.param_groups[0]
         lr = group['lr']
         alpha = group['alpha']
-        params = group['params']
+        eps = group['eps']
+        dP = group['dP']
+        prev_dw = group['prev_dw']
 
         prev_loss, g, H = closure(sample=True)
         record_loss = prev_loss.item()
         print ('prev loss:{}'.format(prev_loss.item()))
         
         H += torch.eye(H.shape[0]).to(device)*alpha
+        H_inv = torch.inverse(H)
 
-        delta_w = -1 * torch.matmul(torch.inverse(H), g).detach()
+        if prev_dw is None:
+            delta_w = (-H_inv @ g).detach() 
+        else:
+            I_GG = torch.squeeze(g.T @ H_inv @ g)
+            I_FF = torch.squeeze(prev_dw.T @ H @ prev_dw)
+            I_GF = torch.squeeze(g.T @ prev_dw)
+            dQ = -eps * dP * torch.sqrt(I_GG)
+            t2 = 0.5 / torch.sqrt((I_GG * (dP**2) - dQ**2) / (I_FF*I_GG - I_GF*I_GF))
+            t1 = (-2*t2*dQ + I_GF) / I_GG
+            print ('t1:{}'.format(t1))
+            print ('t2:{}'.format(t2))
+            delta_w = (-t1/t2 * H_inv @ g + 0.5/t2 * prev_dw).detach()
+        
         offset = 0
         for p in self._params:
             numel = p.numel()
@@ -49,15 +70,16 @@ class LM(Optimizer):
 
         outputs, loss = closure(sample=False)
         print ('loss:{}'.format(loss.item()))
+        group['prev_dw'] = delta_w
 
         if loss < prev_loss:
             print ('successful iteration')
-            if alpha > 1e-5:
+            if alpha >= 1e-5:
                 group['alpha'] /= 10
         else:
             print ('failed iteration')
-            if alpha < 1e5:
-                group['alpha'] *= 10
+            if alpha <= 1e5:
+                group['alpha'] *= 100
             # undo the step
             offset = 0
             for p in self._params:    
