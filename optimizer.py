@@ -12,7 +12,7 @@ class LM(Optimizer):
         lr: learning rate (step size)
         alpha: the hyperparameter in the regularization
     '''
-    def __init__(self, params, lr=1, alpha=1):
+    def __init__(self, params, lr=0.5, alpha=10):
         defaults = dict(
             lr = lr,
             alpha = alpha
@@ -50,7 +50,7 @@ class LM(Optimizer):
                 p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
             offset += numel
 
-        loss = closure(sample=False)
+        outputs, loss = closure(sample=False)
         print ('loss:{}'.format(loss.item()))
 
         if loss < prev_loss:
