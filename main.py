@@ -53,12 +53,13 @@ elif args.optimizer == 'KFAC':
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
     preconditioner = KFAC(model, 0.1)
 elif args.optimizer == 'EKFAC-Adam':
-    # uses SGD or any other optimizer as its base
+    # uses Adam or any other optimizer as its base
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     preconditioner = EKFAC(model, 0.1, sua = False,ra=True)
 elif args.optimizer == 'KFAC-Adam':
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     preconditioner = KFAC(model, 0.1)
+
 if args.dataset != 'regression':
     criterion= nn.CrossEntropyLoss()
 
@@ -70,12 +71,15 @@ train_loss = []
 test_loss = []
 train_acc = []
 test_acc = []
+ntp = sum(p.numel() for p in model.parameters() if p.requires_grad)
+dg = torch.tensor([0.01]*ntp,device=device) 
 for epoch in range(args.epoch_num):
     for idx, (inputs, targets) in enumerate (trainloader):
         print ('iter:{}'.format(idx + 1))
         inputs, targets = inputs.to(device), targets.to(device)
         N = inputs.shape[0]
         if args.optimizer=='LM':
+            # if failed iteration run again over same batch
             def closure(sample=True):
                 N = inputs.shape[0]
                 optimizer.zero_grad()
@@ -93,7 +97,7 @@ for epoch in range(args.epoch_num):
                     loss = criterion(outputs, targets)
                     return outputs, loss
 
-            outputs, record_loss = optimizer.step(closure)
+            outputs, record_loss, dg = optimizer.step(closure,dg)
             correct = torch.sum(torch.argmax(outputs,1) == targets).item()
             
             train_acc.append(correct/N)
