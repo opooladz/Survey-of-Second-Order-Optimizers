@@ -7,7 +7,7 @@ import torchvision
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='mnist', type=str, choices=['mnist', 'mnist_small', 'regression'])
-parser.add_argument('--optimizer', default='LM', type=str, choices=['LM', 'SGD', 'Adam', 'HF', 'EKFAC','KFAC','lbfgs'])
+parser.add_argument('--optimizer', default='LM', type=str, choices=['LM', 'SGD', 'Adam', 'HF', 'EKFAC','KFAC','EKFAC-Adam','KFAC-Adam','lbfgs'])
 parser.add_argument('--net_type', default='cnn', type=str, choices=['cnn', 'mlp'])
 parser.add_argument('--epoch_num', default=1, type=int)
 parser.add_argument('--device', default=2, type=int)
@@ -52,7 +52,13 @@ elif args.optimizer == 'EKFAC':
 elif args.optimizer == 'KFAC':
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
     preconditioner = KFAC(model, 0.1)
-
+elif args.optimizer == 'EKFAC-Adam':
+    # uses SGD or any other optimizer as its base
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    preconditioner = EKFAC(model, 0.1, sua = False,ra=True)
+elif args.optimizer == 'KFAC-Adam':
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    preconditioner = KFAC(model, 0.1)
 if args.dataset != 'regression':
     criterion= nn.CrossEntropyLoss()
 
@@ -103,7 +109,7 @@ for epoch in range(args.epoch_num):
                 return loss
             loss = optimizer.step(closure)
             train_loss.append(loss)
-        elif args.optimizer == 'EKFAC' or args.optimizer == 'KFAC':
+        elif args.optimizer == 'EKFAC' or args.optimizer == 'KFAC' or args.optimizer == 'EKFAC-Adam' or args.optimizer == 'KFAC-Adam':
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs,targets)
