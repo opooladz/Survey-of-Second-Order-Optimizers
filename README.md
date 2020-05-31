@@ -22,8 +22,11 @@ indicate in the argparser `--optimizer`
 * Adam
 * SGD
 * LM
-* HF (to be added)
-* KFAC (to be added)
+* HF 
+* KFAC
+* EKFAC
+* KFAC-Adam
+* EKFAC-Adam
 
 ### run the experiment
 
