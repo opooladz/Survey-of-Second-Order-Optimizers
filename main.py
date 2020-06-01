@@ -25,8 +25,8 @@ elif args.dataset == 'mnist_small':
 elif args.dataset == 'regression':
     pass
 
-trainloader = DataLoader(trainset, batch_size=256, shuffle=True, num_workers=0)
-testloader = DataLoader(testset, batch_size=512, shuffle=False, num_workers=0)
+trainloader = DataLoader(testset, batch_size=600, shuffle=True, num_workers=5,)
+testloader = DataLoader(trainset, batch_size=600, shuffle=False, num_workers=5)
 
 print ('------------------initializating network----------------------')
 
@@ -156,9 +156,9 @@ for epoch in range(args.epoch_num):
         test_acc.append(correct/total)
         test_loss.append(running_loss/(idx+1))
   
-    np.save('./loss_acc_timing/' + id + '_train_loss.npy', np.asarray(train_loss))
-    np.save('./loss_acc_timing/' + id + '_test_loss.npy', np.asarray(test_loss))
-    np.save('./loss_acc_timing/' + id + '_train_acc.npy', np.asarray(train_acc))
-    np.save('./loss_acc_timing/' + id + '_test_acc.npy', np.asarray(test_acc))
+    np.save('./loss_acc_timing/' + id + '_train_loss_.npy', np.asarray(train_loss))
+    np.save('./loss_acc_timing/' + id + '_test_loss_.npy', np.asarray(test_loss))
+    np.save('./loss_acc_timing/' + id + '_train_acc_.npy', np.asarray(train_acc))
+    np.save('./loss_acc_timing/' + id + '_test_acc_.npy', np.asarray(test_acc))
 
 

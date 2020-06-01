@@ -51,7 +51,6 @@ class LM(Optimizer):
         dg = torch.diag(H)
         dg = torch.max(dg_prev,dg)
         H += torch.diag(dg).to(device)*alpha        
-        
         H_inv = torch.inverse(H)
 
         if prev_dw is None:
@@ -66,7 +65,12 @@ class LM(Optimizer):
             print ('t1:{}'.format(t1))
             print ('t2:{}'.format(t2))
             delta_w = (-t1/t2 * H_inv @ g + 0.5/t2 * prev_dw).detach()
-        
+            del I_GG
+            del I_FF
+            del dP
+            del dQ
+        del H
+        del H_inv
         offset = 0
         for p in self._params:
             numel = p.numel()
@@ -121,7 +125,7 @@ class LM(Optimizer):
         else:
             print ('failed iteration')
             if alpha <= 1e5:
-                group['alpha'] *= 100
+                group['alpha'] *= 250
             # undo the step
             offset = 0
             for p in self._params:    
