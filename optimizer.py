@@ -50,7 +50,8 @@ class LM(Optimizer):
 
         dg = torch.diag(H)
         dg = torch.max(dg_prev,dg)
-        H += torch.diag(dg).to(device)*alpha        
+        H += torch.diag(dg).to(device)*alpha
+        #H += torch.eye(H.shape[0]).to(device) * alpha        
         
         H_inv = torch.inverse(H)
 
@@ -114,9 +115,8 @@ class LM(Optimizer):
 
         if loss < prev_loss:
             print ('successful iteration')
-            if alpha >= 1e-5:
+            if (prev_loss - loss)/loss > 0.25 and alpha >= 1e-5:
                 group['alpha'] /= 10
-            # print(loss)
             return outputs, loss, dg 
         else:
             print ('failed iteration')
