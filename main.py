@@ -25,7 +25,7 @@ elif args.dataset == 'mnist_small':
 elif args.dataset == 'regression':
     pass
 
-trainloader = DataLoader(trainset, batch_size=256, shuffle=True, num_workers=0)
+trainloader = DataLoader(trainset, batch_size=512, shuffle=True, num_workers=0)
 testloader = DataLoader(testset, batch_size=512, shuffle=False, num_workers=0)
 
 print ('------------------initializating network----------------------')
