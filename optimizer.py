@@ -3,8 +3,9 @@ from torch.optim.optimizer import Optimizer
 from torch.nn.utils.convert_parameters import vector_to_parameters, parameters_to_vector
 from functools import reduce
 import torch.nn.functional as F
-
+from sklearn import datasets
 device = torch.device('cuda:0')
+
 
 class LM(Optimizer):
     '''
@@ -20,6 +21,7 @@ class LM(Optimizer):
             lr = lr,
             alpha = alpha,
             prev_dw = None,
+            prev_dw1 = None,
             eps = eps,
             dP = dP
         )
@@ -30,7 +32,7 @@ class LM(Optimizer):
 
         self._params = self.param_groups[0]['params']
 
-    def step(self, closure=None,dg_prev=None):
+    def step(self, closure=None,dg_prev=None,cos=None,lr_linesearch=False):
         '''
         performs a single step
         in the closure: we approximate the Hessian for cross entropy loss
@@ -43,6 +45,7 @@ class LM(Optimizer):
         eps = group['eps']
         dP = group['dP']
         prev_dw = group['prev_dw']
+        prev_dw1 = group['prev_dw']
 
         prev_loss, g, H = closure(sample=True)
         record_loss = prev_loss.item()
@@ -50,13 +53,12 @@ class LM(Optimizer):
 
         dg = torch.diag(H)
         dg = torch.max(dg_prev,dg)
-        H += torch.diag(dg).to(device)*alpha
-        #H += torch.eye(H.shape[0]).to(device) * alpha        
-        
+        H += torch.diag(dg).to(device)*alpha        
         H_inv = torch.inverse(H)
-
+        delta_w = (-H_inv @ g).detach() 
         if prev_dw is None:
-            delta_w = (-H_inv @ g).detach() 
+            delta_w = delta_w1 = (-H_inv @ g).detach() 
+            group['prev_dw1'] = delta_w1
         else:
             I_GG = torch.squeeze(g.T @ H_inv @ g)
             I_FF = torch.squeeze(prev_dw.T @ H @ prev_dw)
@@ -66,100 +68,87 @@ class LM(Optimizer):
             t1 = (-2*t2*dQ + I_GF) / I_GG
             print ('t1:{}'.format(t1))
             print ('t2:{}'.format(t2))
-            delta_w = (-t1/t2 * H_inv @ g + 0.5/t2 * prev_dw).detach()
-        
+            delta_w1 = -1*H_inv @ g
+            group['prev_dw1'] = delta_w1
+            delta_w = (t1/t2 *delta_w1  + 0.5/t2 * prev_dw).detach()
+            del I_GG
+            del I_FF
+            del dP
+            del dQ
+        del H
+        del H_inv
         offset = 0
         for p in self._params:
             numel = p.numel()
             with torch.no_grad():
                 p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
             offset += numel
-
-        # # # line search for lr
-        # loss_list = []
-        # line = torch.arange(1e-2,2,0.05)**3
-        # for i in range(len(line)):
-        #     offset = 0
-        #     for p in group['params']:
-        #         numel = p.numel()
-        #         with torch.no_grad():
-        #             p.add_(delta_w[offset:offset + numel].view_as(p),alpha=line[i])
-        #         offset += numel
-        #     outputs, loss = closure(sample=False)
-        #     # print(loss)
-        #     # loss_list.append(torch.mean(diff.detach() ** 2))
-        #     loss_list.append(torch.mean(loss ** 2))
-        #     # loss_list.append(loss)
-        #     # # undo the step
-        #     offset = 0
-        #     for p in group['params']:
-        #         numel = p.numel()
-        #         with torch.no_grad():
-        #             p.sub_( delta_w[offset:offset + numel].view_as(p),alpha=line[i])
-        #         offset += numel
-
-        # idx_best_lr = torch.argmin(torch.tensor(loss_list))
-        # lr = line[idx_best_lr]
-        # print('best lr: {} '.format(lr))
-        # offset = 0
-        # for p in group['params']:
-        #     numel = p.numel()
-        #     with torch.no_grad():
-        #         p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
-        #     offset += numel
-        # # loss = loss_list[idx_best_lr]            
-
         outputs, loss = closure(sample=False)
         print ('loss:{}'.format(loss.item()))
         group['prev_dw'] = delta_w
 
         if loss < prev_loss:
             print ('successful iteration')
-            if (prev_loss - loss)/loss > 0.25 and alpha >= 1e-5:
-                group['alpha'] /= 10
+            if (prev_loss - loss)/loss > 0.75 and alpha >= 1e-5:
+                group['alpha'] /= 10#*=2/3 
             return outputs, loss, dg 
-        else:
-            print ('failed iteration')
-            if alpha <= 1e5:
-                group['alpha'] *= 100
-            # undo the step
-            offset = 0
-            for p in self._params:    
-                numel = p.numel()
-                with torch.no_grad():
-                    p.sub_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
-                offset += numel
-            dg = dg_prev
-            # while prev_loss < loss:
-            #     # flag = 0 
-            #     # H += torch.eye(H.shape[0]).to(device)*alpha
+        elif prev_dw is not None:
+            # use the dir of dtheta1 new but full dir of dtheata old 
+            beta = cos(delta_w1,prev_dw)
+            b = 2
+            tmp = (1-beta)**b *loss
+            print((1-beta)**b)
+            print(tmp)
+            print(loss)
+            print(prev_loss)
+            if tmp <=prev_loss:
+                print('Accepting Uphill Step')
+                if (prev_loss - loss)/loss > 0.75 and alpha >= 1e-5:
+                    # not sure if this is the best way to go maybe dont change the alpha 
+                    group['alpha'] /= 10#*= 2/3
+                return outputs, loss, dg 
+            else:
+                print ('failed iteration')
+                # undo the step
+                offset = 0
+                for p in self._params:    
+                    numel = p.numel()
+                    with torch.no_grad():
+                        p.sub_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
+                    offset += numel
+                # # # line search for lr
+                if lr_linesearch:
+                    loss_list = []
+                    line = torch.arange(1e-2,2,0.05)**3
+                    for i in range(len(line)):
+                        offset = 0
+                        for p in group['params']:
+                            numel = p.numel()
+                            with torch.no_grad():
+                                p.add_(delta_w[offset:offset + numel].view_as(p),alpha=line[i])
+                            offset += numel
+                        outputs, loss = closure(sample=False)
+                        loss_list.append(loss)
+                        # # undo the step
+                        offset = 0
+                        for p in group['params']:
+                            numel = p.numel()
+                            with torch.no_grad():
+                                p.sub_( delta_w[offset:offset + numel].view_as(p),alpha=line[i])
+                            offset += numel
 
-            #     # delta_w = -1 * torch.matmul(torch.inverse(H), g).detach()                
-            #     offset = 0
-            #     for p in self._params:
-            #         numel = p.numel()
-            #         with torch.no_grad():
-            #             p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
-            #         offset += numel
-            #     outputs, loss = closure(sample=False)
-            #     # flag = 1 
-            #     print(prev_loss.item())
-            #     print ('loss:{}'.format(loss.item()))
-            #     if prev_loss < loss:
-            #         print ('failed iteration')
-            #         # if alpha < 1e5:
-            #         group['alpha'] *= 10              
-            #         # undo the step
-            #         offset = 0
-            #         for p in self._params:    
-            #             numel = p.numel()
-            #             with torch.no_grad():
-            #                 p.sub_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
-            #             offset += numel
-            # print ('successful iteration')
-            # # if alpha > 1e-5:
-            # group['alpha'] /= 10
-            
+                    idx_best_lr = torch.argmin(torch.tensor(loss_list))
+                    lr_best = line[idx_best_lr]
+                    print('best lr: {} '.format(lr_best))
+                    offset = 0
+                    for p in group['params']:
+                        numel = p.numel()
+                        with torch.no_grad():
+                            p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr_best)
+                        offset += numel
+                if alpha <= 1e5 and (prev_loss - loss)/loss < 0.25 :
+                    group['alpha'] *=10#*= 3/2
+                dg = dg_prev
         return outputs, prev_loss, dg
 
 
