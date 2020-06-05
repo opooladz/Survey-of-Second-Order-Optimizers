@@ -4,7 +4,7 @@ from optimizer import *
 from dataloading import *
 import argparse
 import torchvision
-import lm
+# import lm
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', default='mnist', type=str, choices=['mnist', 'mnist_small', 'regression'])
@@ -17,7 +17,7 @@ parser.add_argument('--device', default=0, type=int)
 args = parser.parse_args()
 
 device = torch.device('cuda:' + str(args.device))
-torch.manual_seed(123)
+torch.manual_seed(1)
 print ('------------------loading data------------------')
 if args.dataset == 'mnist':
     trainset = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform_MNIST)

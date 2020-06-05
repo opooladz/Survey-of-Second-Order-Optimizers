@@ -91,8 +91,8 @@ class LM(Optimizer):
 
         if loss < prev_loss:
             print ('successful iteration')
-            if (prev_loss - loss)/loss > 0.75 and alpha >= 1e-5:
-                group['alpha'] /= 10#*=2/3 
+            if (prev_loss - loss)/prev_loss > 0.75 and alpha >= 1e-5:
+                group['alpha'] *=2/3 
             return outputs, loss, dg 
         elif prev_dw is not None:
             # use the dir of dtheta1 new but full dir of dtheata old 
@@ -105,9 +105,9 @@ class LM(Optimizer):
             print(prev_loss)
             if tmp <=prev_loss:
                 print('Accepting Uphill Step')
-                if (prev_loss - loss)/loss > 0.75 and alpha >= 1e-5:
+                if (prev_loss - loss  )/prev_loss > 0.75 and alpha >= 1e-5:
                     # not sure if this is the best way to go maybe dont change the alpha 
-                    group['alpha'] /= 10#*= 2/3
+                    group['alpha'] *= 2/3
                 return outputs, loss, dg 
             else:
                 print ('failed iteration')
@@ -121,6 +121,7 @@ class LM(Optimizer):
                 # # # line search for lr
                 if lr_linesearch:
                     loss_list = []
+                    output_list = []
                     line = torch.arange(1e-2,2,0.05)**3
                     for i in range(len(line)):
                         offset = 0
@@ -130,6 +131,7 @@ class LM(Optimizer):
                                 p.add_(delta_w[offset:offset + numel].view_as(p),alpha=line[i])
                             offset += numel
                         outputs, loss = closure(sample=False)
+                        output_list.append(outputs)
                         loss_list.append(loss)
                         # # undo the step
                         offset = 0
@@ -148,10 +150,10 @@ class LM(Optimizer):
                         with torch.no_grad():
                             p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr_best)
                         offset += numel
-                if alpha <= 1e5 and (prev_loss - loss)/loss < 0.25 :
-                    group['alpha'] *=10#*= 3/2
+                elif alpha <= 1e5 and (loss - prev_loss  )/prev_loss < 0.25 :
+                    group['alpha'] *= 3/2
                 # loss = loss_list[idx_best_lr]    
-                dg = dg_prev
+                    dg = dg_prev
                 # while prev_loss < loss:
                 #     # flag = 0 
                 #     # H += torch.eye(H.shape[0]).to(device)*alpha
