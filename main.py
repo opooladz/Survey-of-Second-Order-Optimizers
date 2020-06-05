@@ -35,13 +35,8 @@ elif args.dataset == 'regression':
     targets = torch.sin(inputs) + 0.2*torch.rand(inputs.size()).to(device)
 
 if args.dataset != 'regression':
-<<<<<<< HEAD
     trainloader = DataLoader(trainset, batch_size=600, shuffle=True, num_workers=5)
     testloader = DataLoader(testset, batch_size=600, shuffle=False, num_workers=5)
-=======
-    trainloader = DataLoader(testset, batch_size=512, shuffle=True, num_workers=5)
-    testloader = DataLoader(trainset, batch_size=512, shuffle=False, num_workers=5)
->>>>>>> ecae342beff158632c733fd86929f61b59869a92
 
 print ('------------------initializating network----------------------')
 
