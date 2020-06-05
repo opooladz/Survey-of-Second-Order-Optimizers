@@ -26,10 +26,8 @@ elif args.dataset == 'mnist_small':
     trainset = MNIST_small(train=True)
     testset = MNIST_small(train=False)
 elif args.dataset == 'regression':
-    inputs = ((torch.rand([1000,1,1,1]) - 0.5) * 20).cuda()
-    targets = (torch.sin(inputs)).cuda()
-    test_inputs = ((torch.rand([1000,1,1,1]) - 0.5) * 20).cuda()
-    test_targets = (torch.sin(test_inputs)).cuda()
+    inputs = torch.unsqueeze(torch.linspace(-10, 10, 1000), dim=1).to(device)
+    targets = torch.sin(inputs) + 0.2*torch.rand(inputs.size()).to(device)
 
 if args.dataset != 'regression':
     trainloader = DataLoader(testset, batch_size=600, shuffle=True, num_workers=5)
@@ -46,10 +44,7 @@ elif args.net_type =='mlp_r':
     model = MLP_R().to(device)
 
 if args.optimizer == 'LM':
-    if args.dataset != 'regression':
-        optimizer = LM(model.parameters(), lr=1, alpha=1)
-    else:
-        optimizer = LM(model.parameters(), lr=1, alpha=1)        
+    optimizer = LM(model.parameters(), lr=1, alpha=1)        
 elif args.optimizer == 'SGD':
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
 elif args.optimizer == 'Adam':
@@ -148,7 +143,6 @@ if args.dataset != 'regression':
                 optimizer.step()
                 train_loss.append(loss)
 
-
             elif args.optimizer == 'Adam' or args.optimizer == 'SGD':
                 optimizer.zero_grad()
                 outputs = model(inputs)
@@ -178,40 +172,27 @@ if args.dataset != 'regression':
     np.save('./loss_acc_timing/' + id + '_test_loss_.npy', np.asarray(test_loss))
     np.save('./loss_acc_timing/' + id + '_train_acc_.npy', np.asarray(train_acc))
     np.save('./loss_acc_timing/' + id + '_test_acc_.npy', np.asarray(test_acc))            
-else:
 
+else:
+    inputs = torch.unsqueeze(torch.linspace(-10, 10, 1000), dim=1).to(device)
+    targets = torch.sin(inputs) + 0.2*torch.rand(inputs.size()).to(device)
     if args.optimizer == 'LM':
-        N = inputs.shape[0]
-        def closure(sample=True):
-            
-            z = model(inputs)
-            diff = (z - targets).squeeze()
-            prev_loss = torch.mean(diff.detach() ** 2)
-            J = jacobian(diff,model.parameters() , create_graph=True, retain_graph=True).detach()
-            H = 2*torch.matmul(J.T, J)
-            if sample ==True:
-                return prev_loss, torch.matmul(J.T, diff), H 
-            else:
-                return z, prev_loss      
-        # def closure(sample=True):
-        #     out = model(inputs)
-        #     diff = (out - targets).squeeze()
-        #     if sample ==True:
-        #         return diff
-        #     else:
-        #         return out, diff
-        errHistLM = []
-        iter = 1
-        count  = 1
         for i in range(args.regression_iters):
+            def closure(sample=True):
+                out = model(inputs)
+                diff = (out - targets).squeeze()
+                if sample:
+                    J = jacobian(diff, model.parameters(), create_graph=True, retain_graph=True).detach()
+                    H = J.T @ J
+                    g = J.T @ diff
+                    loss = torch.mean(diff.detach()**2)
+                    return loss, g, H
+                else:
+                    loss = torch.mean(diff.detach()**2)
+                    return out, loss
             optimizer.zero_grad()
-            # loss = optimizer.step(closure)
-            # train_loss.append(loss)
-            outputs, record_loss, dg = optimizer.step(closure,dg,cos,args.lr_linesearch)
-            correct = torch.sum(torch.argmax(outputs,1) == targets).item()
-            
-            train_acc.append(correct/N)
-            train_loss.append(record_loss)
+            out, loss, dg = optimizer.step(closure, dg_prev=dg, cos=cos)
+
 
     elif args.optimizer == 'HF': 
         def closure():
@@ -253,7 +234,11 @@ else:
             correct = torch.sum(torch.argmax(outputs,1) == targets).item()
             train_loss.append(loss.item())
 
+    np.save('./loss_acc_timing/' + id + '_train_loss_sin.npy', np.asarray(train_loss))
 
+
+
+'''
     print ('testing...')
     total, correct = 0, 0
     running_loss = 0.0
@@ -267,10 +252,8 @@ else:
     test_acc.append(correct/total)
     test_loss.append(running_loss/(i+1))
 
-  
     np.save('./loss_acc_timing/' + id + '_train_loss_sin.npy', np.asarray(train_loss))
     np.save('./loss_acc_timing/' + id + '_test_loss_sin.npy', np.asarray(test_loss))
     np.save('./loss_acc_timing/' + id + '_train_acc_sin.npy', np.asarray(train_acc))
-    np.save('./loss_acc_timing/' + id + '_test_acc_sin.npy', np.asarray(test_acc))        
-
-
+    np.save('./loss_acc_timing/' + id + '_test_acc_sin.npy', np.asarray(test_acc))     
+'''

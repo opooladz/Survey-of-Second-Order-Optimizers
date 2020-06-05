@@ -83,8 +83,6 @@ class LM(Optimizer):
             with torch.no_grad():
                 p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
             offset += numel
-      
-
         outputs, loss = closure(sample=False)
         print ('loss:{}'.format(loss.item()))
         group['prev_dw'] = delta_w
@@ -135,7 +133,7 @@ class LM(Optimizer):
                         loss_list.append(loss)
                         # # undo the step
                         offset = 0
-                        for p in group['params']:
+                        for p in grouip['params']:
                             numel = p.numel()
                             with torch.no_grad():
                                 p.sub_( delta_w[offset:offset + numel].view_as(p),alpha=line[i])
