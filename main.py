@@ -4,6 +4,7 @@ from optimizer import *
 from dataloading import *
 import argparse
 import torchvision
+from timeit import default_timer as timer
 # import lm
 
 parser = argparse.ArgumentParser()
@@ -13,7 +14,11 @@ parser.add_argument('--net_type', default='cnn', type=str, choices=['cnn', 'mlp'
 parser.add_argument('--lr_linesearch', default=False,type=bool)
 parser.add_argument('--epoch_num', default=1, type=int)
 parser.add_argument('--regression_iters', default=100, type=int)
+parser.add_argument('--target_loss',default=0.01,type= float)
+parser.add_argument('--target_acc',default=.90,type= float)
+
 parser.add_argument('--device', default=0, type=int)
+parser.add_argument('--timer', default=False, type=bool)
 args = parser.parse_args()
 
 device = torch.device('cuda:' + str(args.device))
@@ -30,8 +35,8 @@ elif args.dataset == 'regression':
     targets = torch.sin(inputs) + 0.2*torch.rand(inputs.size()).to(device)
 
 if args.dataset != 'regression':
-    trainloader = DataLoader(testset, batch_size=600, shuffle=True, num_workers=5)
-    testloader = DataLoader(trainset, batch_size=600, shuffle=False, num_workers=5)
+    trainloader = DataLoader(trainset, batch_size=600, shuffle=True, num_workers=5)
+    testloader = DataLoader(testset, batch_size=600, shuffle=False, num_workers=5)
 
 print ('------------------initializating network----------------------')
 
@@ -76,6 +81,7 @@ else:
 id = args.dataset + '_' + args.net_type + '_' + args.optimizer 
 print (id)
 
+
 print ('-------------------training---------------------------')
 train_loss = []
 test_loss = []
@@ -85,12 +91,17 @@ ntp = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print('Number of Trainable Params: {}'.format(ntp))
 dg = torch.tensor([0.01]*ntp,device=device) 
 cos = torch.nn.CosineSimilarity(dim=0).to(device)
+ls = args.lr_linesearch
+target_loss = args.target_loss
+target_acc = args.target_acc
+time_list = []
 if args.dataset != 'regression':
     for epoch in range(args.epoch_num):
         for idx, (inputs, targets) in enumerate (trainloader):
             print ('iter:{}'.format(idx + 1))
             inputs, targets = inputs.to(device), targets.to(device)
             N = inputs.shape[0]
+            start = timer()
             if args.optimizer=='LM':
                 # if failed iteration run again over same batch
                 def closure(sample=True):
@@ -111,6 +122,7 @@ if args.dataset != 'regression':
                         return outputs, loss
 
                 outputs, record_loss, dg = optimizer.step(closure,dg,cos,args.lr_linesearch)
+                # dg = optimizer.step(closure,dg,cos,ls)
                 correct = torch.sum(torch.argmax(outputs,1) == targets).item()
                 
                 train_acc.append(correct/N)
@@ -151,10 +163,12 @@ if args.dataset != 'regression':
                 optimizer.step()
                 correct = torch.sum(torch.argmax(outputs,1) == targets).item()
                 train_loss.append(loss.item())
-
+            end = timer()
+            time_list.append(end-start)
             if idx == 100:
                 break
 
+            # if args.timer !=True or idx%10 == 0:
             print ('testing...')
             total, correct = 0, 0
             running_loss = 0.0
@@ -167,11 +181,27 @@ if args.dataset != 'regression':
                 total += inputs.shape[0]
             test_acc.append(correct/total)
             test_loss.append(running_loss/(idx+1))
+            if target_acc <= test_acc[-1]: #target_loss >= test_loss[-1] or :
+                break
 
-    np.save('./loss_acc_timing/' + id + '_train_loss_.npy', np.asarray(train_loss))
-    np.save('./loss_acc_timing/' + id + '_test_loss_.npy', np.asarray(test_loss))
-    np.save('./loss_acc_timing/' + id + '_train_acc_.npy', np.asarray(train_acc))
-    np.save('./loss_acc_timing/' + id + '_test_acc_.npy', np.asarray(test_acc))            
+
+    print(sum(time_list))
+    print ('testing...')
+    total, correct = 0, 0
+    running_loss = 0.0
+    for idx, (inputs, targets) in enumerate(testloader):    
+        inputs, targets = inputs.to(device), targets.to(device)
+        outputs = model(inputs)
+        loss = F.cross_entropy(outputs, targets)
+        running_loss += loss.item()
+        correct += torch.sum(torch.argmax(outputs,1) == targets).item()
+        total += inputs.shape[0]
+    print('Final Accuracy: {}'.format(correct/total))
+
+    # np.save('./loss_acc_timing/' + id + '_train_loss_.npy', np.asarray(train_loss))
+    # np.save('./loss_acc_timing/' + id + '_test_loss_.npy', np.asarray(test_loss))
+    # np.save('./loss_acc_timing/' + id + '_train_acc_.npy', np.asarray(train_acc))
+    # np.save('./loss_acc_timing/' + id + '_test_acc_.npy', np.asarray(test_acc))            
 
 else:
     inputs = torch.unsqueeze(torch.linspace(-10, 10, 1000), dim=1).to(device)

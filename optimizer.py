@@ -4,6 +4,7 @@ from torch.nn.utils.convert_parameters import vector_to_parameters, parameters_t
 from functools import reduce
 import torch.nn.functional as F
 from sklearn import datasets
+import inv_cupy
 device = torch.device('cuda:0')
 
 
@@ -38,23 +39,23 @@ class LM(Optimizer):
         in the closure: we approximate the Hessian for cross entropy loss
 
         '''
-        assert len(self.param_groups) == 1
+        # assert len(self.param_groups) == 1
         group = self.param_groups[0]
         lr = group['lr']
         alpha = group['alpha']
         eps = group['eps']
         dP = group['dP']
         prev_dw = group['prev_dw']
-        prev_dw1 = group['prev_dw']
+        # prev_dw1 = group['prev_dw']
 
         prev_loss, g, H = closure(sample=True)
-        record_loss = prev_loss.item()
-        print ('prev loss:{}'.format(prev_loss.item()))
+        # record_loss = prev_loss.item()
+        # print ('prev loss:{}'.format(prev_loss.item()))
 
         dg = torch.diag(H)
         dg = torch.max(dg_prev,dg)
         H += torch.diag(dg).to(device)*alpha        
-        H_inv = torch.inverse(H)
+        H_inv = inv_cupy.invc(H)
         delta_w = (-H_inv @ g).detach() 
         if prev_dw is None:
             delta_w = delta_w1 = (-H_inv @ g).detach() 
@@ -66,17 +67,17 @@ class LM(Optimizer):
             dQ = -eps * dP * torch.sqrt(I_GG)
             t2 = 0.5 / torch.sqrt((I_GG * (dP**2) - dQ**2) / (I_FF*I_GG - I_GF*I_GF))
             t1 = (-2*t2*dQ + I_GF) / I_GG
-            print ('t1:{}'.format(t1))
-            print ('t2:{}'.format(t2))
+            # print ('t1:{}'.format(t1))
+            # print ('t2:{}'.format(t2))
             delta_w1 = -1*H_inv @ g
             group['prev_dw1'] = delta_w1
             delta_w = (t1/t2 *delta_w1  + 0.5/t2 * prev_dw).detach()
-            del I_GG
-            del I_FF
-            del dP
-            del dQ
-        del H
-        del H_inv
+            # del I_GG
+            # del I_FF
+            # del dP
+            # del dQ
+        # del H
+        # del H_inv
         offset = 0
         for p in self._params:
             numel = p.numel()
@@ -84,31 +85,33 @@ class LM(Optimizer):
                 p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
             offset += numel
         outputs, loss = closure(sample=False)
-        print ('loss:{}'.format(loss.item()))
+        # print ('loss:{}'.format(loss.item()))
         group['prev_dw'] = delta_w
 
         if loss < prev_loss:
-            print ('successful iteration')
+            # print ('successful iteration')
             if (prev_loss - loss)/prev_loss > 0.75 and alpha >= 1e-5:
                 group['alpha'] *=2/3 
             return outputs, loss, dg 
+            # return dg
         elif prev_dw is not None:
             # use the dir of dtheta1 new but full dir of dtheata old 
             beta = cos(delta_w1,prev_dw)
             b = 2
             tmp = (1-beta)**b *loss
-            print((1-beta)**b)
-            print(tmp)
-            print(loss)
-            print(prev_loss)
+            # print((1-beta)**b)
+            # print(tmp)
+            # print(loss)
+            # print(prev_loss)
             if tmp <=prev_loss:
-                print('Accepting Uphill Step')
+                # print('Accepting Uphill Step')
                 if (prev_loss - loss  )/prev_loss > 0.75 and alpha >= 1e-5:
                     # not sure if this is the best way to go maybe dont change the alpha 
                     group['alpha'] *= 2/3
-                return outputs, loss, dg 
+                return outputs, loss, dg
+                # return dg 
             else:
-                print ('failed iteration')
+                # print ('failed iteration')
                 # undo the step
                 offset = 0
                 for p in self._params:    
@@ -133,7 +136,7 @@ class LM(Optimizer):
                         loss_list.append(loss)
                         # # undo the step
                         offset = 0
-                        for p in grouip['params']:
+                        for p in group['params']:
                             numel = p.numel()
                             with torch.no_grad():
                                 p.sub_( delta_w[offset:offset + numel].view_as(p),alpha=line[i])
@@ -141,7 +144,7 @@ class LM(Optimizer):
 
                     idx_best_lr = torch.argmin(torch.tensor(loss_list))
                     lr_best = line[idx_best_lr]
-                    print('best lr: {} '.format(lr_best))
+                    # print('best lr: {} '.format(lr_best))
                     offset = 0
                     for p in group['params']:
                         numel = p.numel()
@@ -183,6 +186,7 @@ class LM(Optimizer):
                 # group['alpha'] /= 10
                 
         return outputs, prev_loss, dg
+        # return dg
 
 
 class HessianFree(torch.optim.Optimizer):
