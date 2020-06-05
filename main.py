@@ -29,8 +29,8 @@ elif args.dataset == 'regression':
     targets = torch.sin(inputs) + 0.2*torch.rand(inputs.size()).to(device)
 
 if args.dataset != 'regression':
-    trainloader = DataLoader(testset, batch_size=600, shuffle=True, num_workers=5)
-    testloader = DataLoader(trainset, batch_size=600, shuffle=False, num_workers=5)
+    trainloader = DataLoader(testset, batch_size=512, shuffle=True, num_workers=5)
+    testloader = DataLoader(trainset, batch_size=512, shuffle=False, num_workers=5)
 
 print ('------------------initializating network----------------------')
 
@@ -49,7 +49,7 @@ elif args.optimizer == 'SGD':
 elif args.optimizer == 'Adam':
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 elif args.optimizer == 'lbfgs':
-    optimizer  = torch.optim.LBFGS(model.parameters(), lr=0.01)#,line_search_fn= 'strong_wolfe')
+    optimizer  = torch.optim.LBFGS(model.parameters(), lr=0.01, line_search_fn= 'strong_wolfe')
 elif args.optimizer == 'HF':
     optimizer = HessianFree(model.parameters(), use_gnm=True, verbose=False)
 elif args.optimizer == 'EKFAC':
@@ -111,7 +111,6 @@ if args.dataset != 'regression':
 
                 outputs, record_loss, dg = optimizer.step(closure,dg,cos,args.lr_linesearch)
                 correct = torch.sum(torch.argmax(outputs,1) == targets).item()
-                
                 train_acc.append(correct/N)
                 train_loss.append(record_loss)
 
@@ -123,7 +122,11 @@ if args.dataset != 'regression':
                     return loss, z
                 optimizer.zero_grad()
                 loss = optimizer.step(closure, M_inv=None)
+                outputs = model(inputs)
+                correct = torch.sum(torch.argmax(outputs,1) == targets).item()
+                train_acc.append(correct/N)
                 train_loss.append(loss)
+
             elif args.optimizer == 'lbfgs':
                 def closure():
                     optimizer.zero_grad()
@@ -132,6 +135,9 @@ if args.dataset != 'regression':
                     loss.backward()
                     return loss
                 loss = optimizer.step(closure)
+                outputs = model(inputs)
+                correct = torch.sum(torch.argmax(outputs,1) == targets).item()
+                train_acc.append(correct/N)
                 train_loss.append(loss)
             elif args.optimizer == 'EKFAC' or args.optimizer == 'KFAC' or args.optimizer == 'EKFAC-Adam' or args.optimizer == 'KFAC-Adam':
                 optimizer.zero_grad()
@@ -140,6 +146,8 @@ if args.dataset != 'regression':
                 loss.backward()
                 preconditioner.step()  # Add a step of preconditioner before the optimizer step.
                 optimizer.step()
+                correct = torch.sum(torch.argmax(outputs,1) == targets).item()
+                train_acc.append(correct/N)
                 train_loss.append(loss)
 
             elif args.optimizer == 'Adam' or args.optimizer == 'SGD':
@@ -149,6 +157,7 @@ if args.dataset != 'regression':
                 loss.backward()
                 optimizer.step()
                 correct = torch.sum(torch.argmax(outputs,1) == targets).item()
+                train_acc.append(correct/N)
                 train_loss.append(loss.item())
 
             if idx == 100:
