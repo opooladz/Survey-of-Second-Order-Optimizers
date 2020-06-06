@@ -52,16 +52,15 @@ class LM(Optimizer):
         # record_loss = prev_loss.item()
         # print ('prev loss:{}'.format(prev_loss.item()))
 
-        dg = torch.diag(H)
-        dg = torch.max(dg_prev,dg)
+        dg = torch.max(dg_prev,torch.diag(H))
         H += torch.diag(dg).to(device)*alpha        
-        H_inv = inv_cupy.invc(H)
-        delta_w = (-H_inv @ g).detach() 
+        # H_inv = inv_cupy.invc(H)
         if prev_dw is None:
-            delta_w = delta_w1 = (-H_inv @ g).detach() 
+            delta_w = delta_w1 = (-torch.inverse(H) @ g).detach() 
             group['prev_dw1'] = delta_w1
         else:
-            I_GG = torch.squeeze(g.T @ H_inv @ g)
+            delta_w1 = -1*torch.inverse(H) @ g
+            I_GG = torch.squeeze(-1*g.T @ delta_w1)
             I_FF = torch.squeeze(prev_dw.T @ H @ prev_dw)
             I_GF = torch.squeeze(g.T @ prev_dw)
             dQ = -eps * dP * torch.sqrt(I_GG)
@@ -69,7 +68,6 @@ class LM(Optimizer):
             t1 = (-2*t2*dQ + I_GF) / I_GG
             # print ('t1:{}'.format(t1))
             # print ('t2:{}'.format(t2))
-            delta_w1 = -1*H_inv @ g
             group['prev_dw1'] = delta_w1
             delta_w = (t1/t2 *delta_w1  + 0.5/t2 * prev_dw).detach()
             # del I_GG
