@@ -23,7 +23,7 @@ indicate in the argparser `--optimizer`
 * Adam
 * SGD
 * LM
-* HF 
+* HF <- adapted from https://github.com/fmeirinhos/pytorch-hessianfree
 * KFAC
 * EKFAC
 * KFAC-Adam
