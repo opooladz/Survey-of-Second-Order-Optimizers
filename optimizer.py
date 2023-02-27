@@ -39,6 +39,141 @@ class LM(Optimizer):
         in the closure: we approximate the Hessian for cross entropy loss
 
         '''
+        group = self.param_groups[0]
+        lr = group['lr']
+        alpha = group['alpha']
+        eps = group['eps']
+        dP = group['dP']
+        prev_dw = group['prev_dw']
+
+        prev_loss, g, H = closure(sample=True)
+        
+        # diagonal loading
+        dg = torch.max(dg_prev,torch.diag(H))
+        H += torch.diag(dg).to(device)*alpha        
+        if prev_dw is None:
+            delta_w = delta_w1 = (-torch.inverse(H) @ g).detach() 
+            group['prev_dw1'] = delta_w1
+        else:
+            # adaptive momentum via conjugate method
+            delta_w1 = -1*torch.inverse(H) @ g
+            I_GG = torch.squeeze(-1*g.T @ delta_w1)
+            I_FF = torch.squeeze(prev_dw.T @ H @ prev_dw)
+            I_GF = torch.squeeze(g.T @ prev_dw)
+            dQ = -eps * dP * torch.sqrt(I_GG)
+            t2 = 0.5 / torch.sqrt((I_GG * (dP**2) - dQ**2) / (I_FF*I_GG - I_GF*I_GF))
+            t1 = (-2*t2*dQ + I_GF) / I_GG
+            # print ('t1:{}'.format(t1))
+            # print ('t2:{}'.format(t2))
+            group['prev_dw1'] = delta_w1
+            delta_w = (t1/t2 *delta_w1  + 0.5/t2 * prev_dw).detach()
+
+        offset = 0
+        for p in self._params:
+            numel = p.numel()
+            with torch.no_grad():
+                p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
+            offset += numel
+        outputs, loss = closure(sample=False)
+        # print ('loss:{}'.format(loss.item()))
+        group['prev_dw'] = delta_w
+
+        if loss < prev_loss:
+            # print ('successful iteration')
+            if (prev_loss - loss)/prev_loss > 0.75 and alpha >= 1e-5:
+                group['alpha'] *=2/3 
+            return outputs, loss, dg 
+            # return dg
+        elif prev_dw is not None:
+            # use the dir of dtheta1 new but full dir of dtheata old 
+            beta = cos(delta_w1,prev_dw)
+            b = 2
+            tmp = (1-beta)**b *loss
+  
+            if tmp <=prev_loss:
+                # print('Accepting Uphill Step')
+                if (prev_loss - loss  )/prev_loss > 0.75 and alpha >= 1e-5:
+                    # not sure if this is the best way to go maybe dont change the alpha 
+                    group['alpha'] *= 2/3
+                return outputs, loss, dg
+            else:
+                # print ('failed iteration')
+                # undo the step
+                offset = 0
+                for p in self._params:    
+                    numel = p.numel()
+                    with torch.no_grad():
+                        p.sub_(delta_w[offset:offset + numel].view_as(p),alpha=lr)
+                    offset += numel
+                # # # line search for lr
+                if lr_linesearch:
+                    loss_list = []
+                    output_list = []
+                    line = torch.arange(1e-2,2,0.05)**3
+                    for i in range(len(line)):
+                        offset = 0
+                        for p in group['params']:
+                            numel = p.numel()
+                            with torch.no_grad():
+                                p.add_(delta_w[offset:offset + numel].view_as(p),alpha=line[i])
+                            offset += numel
+                        outputs, loss = closure(sample=False)
+                        output_list.append(outputs)
+                        loss_list.append(loss)
+                        # # undo the step
+                        offset = 0
+                        for p in group['params']:
+                            numel = p.numel()
+                            with torch.no_grad():
+                                p.sub_( delta_w[offset:offset + numel].view_as(p),alpha=line[i])
+                            offset += numel
+
+                    idx_best_lr = torch.argmin(torch.tensor(loss_list))
+                    lr_best = line[idx_best_lr]
+                    offset = 0
+                    for p in group['params']:
+                        numel = p.numel()
+                        with torch.no_grad():
+                            p.add_(delta_w[offset:offset + numel].view_as(p),alpha=lr_best)
+                        offset += numel
+                elif alpha <= 1e5 and (loss - prev_loss  )/prev_loss < 0.25 :
+                    group['alpha'] *= 3/2
+                    dg = dg_prev
+     
+                
+        return outputs, prev_loss, dg
+
+class LM_back(Optimizer):
+    '''
+    Arguments:
+        lr: learning rate (step size)
+        alpha: the hyperparameter in the regularization
+        prev_dw: keep track of the previous delta_w as a momentum term 
+        eps, dP: two hyperparameter in the CG momentum
+
+    '''
+    def __init__(self, params, lr=1, alpha=1, eps=0.9, dP=0.6):
+        defaults = dict(
+            lr = lr,
+            alpha = alpha,
+            prev_dw = None,
+            prev_dw1 = None,
+            eps = eps,
+            dP = dP
+        )
+        super(LM, self).__init__(params, defaults)
+
+        if len(self.param_groups) != 1:
+            raise ValueError ("LM doesn't support per-parameter options") 
+
+        self._params = self.param_groups[0]['params']
+
+    def step(self, closure=None,dg_prev=None,cos=None,lr_linesearch=False):
+        '''
+        performs a single step
+        in the closure: we approximate the Hessian for cross entropy loss
+
+        '''
         # assert len(self.param_groups) == 1
         group = self.param_groups[0]
         lr = group['lr']
@@ -185,8 +320,7 @@ class LM(Optimizer):
                 
         return outputs, prev_loss, dg
         # return dg
-
-
+        
 class HessianFree(torch.optim.Optimizer):
     """
     Implements the Hessian-free algorithm presented in `Training Deep and
